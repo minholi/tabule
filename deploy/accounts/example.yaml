@@ -1,0 +1,25 @@
+# Copie para /etc/tabule/accounts/<id_da_conta>.yaml e ajuste.
+# Mantenha os nomes das opções entre aspas e com o valor EXATO do atributo no Chatwoot.
+# Descrição vazia impede a classificação até ser preenchida.
+name: "Nome da conta (aparece nos logs)"
+mode: shadow                 # shadow: só registra | live: grava no Chatwoot
+inbox_ids: [16, 27, 37]      # inboxes cujas conversas podem ser tabuladas
+attribute_key: tabulacao
+review_label: tabulacao-revisar
+confidence_threshold: 0.8    # calibrar com `tabule evaluate` antes do modo live
+context: >
+  Descreva o negócio e o tipo de atendimento para orientar a classificação.
+options:
+  "IMPRODUTIVO JA E ALUNO": ""
+  "SEM AFINIDADE FORA DO PUBLICO": ""
+  "RECUSA FINANCEIRO": ""
+  "RECUSA QUER CURSO FDC": ""
+  "RECUSA PROXIMO ANO": ""
+  "RECUSA PROX TURMA / SEMESTRE": ""
+  "RECUSA CURSO DE INTERESSE": ""
+  "NEGOCIACAO EM ANDAMENTO": ""
+  "MENSAGEM AUTOMÁTICA": ""
+  "IMPRODUTIVO RESPONDEU HSM SEM INTERESSE": ""
+  "PAROU DE RESPONDER SONDAGEM": ""
+  "PAROU DE RESPONDER PRODUTO": ""
+  "PAROU DE RESPONDER INVESTIMENTO": ""

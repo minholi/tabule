@@ -1,0 +1,22 @@
+[Unit]
+Description=tabule - tabulação automática de conversas do Chatwoot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tabule
+Group=tabule
+WorkingDirectory=/opt/tabule
+EnvironmentFile=/etc/tabule/tabule.env
+ExecStart=/opt/tabule/.venv/bin/tabule serve
+Restart=always
+RestartSec=5
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/tabule
+
+[Install]
+WantedBy=multi-user.target
