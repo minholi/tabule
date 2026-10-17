@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hmac
 import logging
+import os
 import sys
 import time
 from datetime import datetime
@@ -11,11 +12,13 @@ from typing import Any, Mapping, NamedTuple, Sequence
 import httpx
 import uvicorn
 
+from . import accountfile
 from .app import build_pipeline, create_app
 from .chatwoot import WEBHOOK_EVENT, ChatwootClient, ChatwootError, RemoteConfigError, attribute_options
 from .classifier import build_choices, build_instructions
 from .config import AccountConfig, ConfigError, Settings, load_accounts
 from .decisions import DecisionsClient
+from .describer import DescriberError, DescriptionWriter
 from .store import Store
 from .transcript import build_transcript
 
@@ -264,6 +267,65 @@ def cmd_revert(settings: Settings, accounts: Mapping[int, AccountConfig], args: 
     return 0
 
 
+def _parse_inbox_ids(raw: str | None) -> list[int]:
+    try:
+        ids = [int(part) for part in (raw or "").split(",") if part.strip()]
+    except ValueError:
+        raise SystemExit(f"--inbox-ids inválido: '{raw}'") from None
+    if any(i <= 0 for i in ids):
+        raise SystemExit(f"--inbox-ids inválido: '{raw}'")
+    return ids
+
+
+def cmd_describe(settings: Settings, args: argparse.Namespace) -> int:
+    """Preenche context e descrições do YAML da conta. Não usa load_accounts: o YAML pode estar incompleto."""
+    if args.account not in settings.allowed_account_ids:
+        raise SystemExit(f"A conta {args.account} não está em TABULE_ALLOWED_ACCOUNT_IDS.")
+    token = os.environ.get(f"TABULE_ACCOUNT_{args.account}_API_TOKEN", "").strip()
+    if not token:
+        raise SystemExit(f"TABULE_ACCOUNT_{args.account}_API_TOKEN não definido")
+    path = settings.accounts_dir / f"{args.account}.yaml"
+    try:
+        data = accountfile.load(path)
+        created = data is None
+        if data is None:
+            inbox_ids = _parse_inbox_ids(args.inbox_ids)
+            if not inbox_ids:
+                raise SystemExit(f"{path} não existe: informe --inbox-ids para criá-lo.")
+            data = accountfile.skeleton(args.account, name=args.name, inbox_ids=inbox_ids)
+        attribute_key = str(data.get("attribute_key") or "tabulacao").strip()
+        client = ChatwootClient(settings.chatwoot_base_url, token, args.account, timeout=settings.http_timeout_seconds)
+        try:
+            values = attribute_options(client.attribute_definitions(), attribute_key)
+        finally:
+            client.close()
+        todo = accountfile.pending(data, values, force=args.force)
+        if not todo:
+            print("Nada a preencher: context e todas as descrições já estão escritos. Use --force para regenerar.")
+            return 0
+        writer = DescriptionWriter(
+            settings.openai_api_key or "", settings.openai_describe_model, timeout=settings.http_timeout_seconds
+        )
+        try:
+            result = writer.describe(about=args.about, options=values)
+        finally:
+            writer.close()
+        accountfile.apply(data, result.context, result.options, todo)
+    except (accountfile.AccountFileError, RemoteConfigError, ChatwootError, DescriberError, httpx.HTTPError) as exc:
+        print(f"Erro: {exc}", file=sys.stderr)
+        return 1
+    print(f"context: {'gerado' if todo.context else 'mantido'}")
+    print(f"descrições geradas: {len(todo.options)} de {len(values)}")
+    if args.dry_run:
+        print(f"--- {path} (dry-run, nada foi gravado) ---")
+        print(accountfile.render(data))
+        return 0
+    backup = accountfile.save(path, data)
+    print(f"{'Criado' if created else 'Atualizado'}: {path}" + (f" (backup em {backup})" if backup else ""))
+    print("O texto é um rascunho: revise, rode `tabule check` e mantenha `mode: shadow` até calibrar com `tabule evaluate`.")
+    return 0
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="tabule", description="Tabulação automática de conversas do Chatwoot.")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -278,6 +340,13 @@ def _parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--account", type=int, required=True)
     evaluate.add_argument("--sample", type=int, default=40)
     evaluate.add_argument("--pages", type=int, default=20)
+    describe = sub.add_parser("describe", help="gera context e descrições das opções no YAML da conta")
+    describe.add_argument("--account", type=int, required=True)
+    describe.add_argument("--about", required=True, help="texto livre sobre o negócio e o atendimento")
+    describe.add_argument("--force", action="store_true", help="regenera também o que já está preenchido")
+    describe.add_argument("--dry-run", action="store_true", help="mostra o YAML resultante sem gravar")
+    describe.add_argument("--inbox-ids", help="ids das inboxes, separados por vírgula (só se o YAML ainda não existe)")
+    describe.add_argument("--name", help="nome da conta (só se o YAML ainda não existe)")
     revert = sub.add_parser("revert", help="desfaz as gravações feitas pela IA")
     revert.add_argument("--account", type=int, required=True)
     revert.add_argument("--since", required=True, help="data inicial, formato AAAA-MM-DD")
@@ -288,7 +357,7 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
-        settings = Settings.from_env(require_openai=args.command in ("serve", "evaluate"))
+        settings = Settings.from_env(require_openai=args.command in ("serve", "evaluate", "describe"))
     except ConfigError as exc:
         print(f"Configuração inválida: {exc}", file=sys.stderr)
         return 2
@@ -296,6 +365,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         level=getattr(logging, settings.log_level.upper(), logging.INFO),
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
+    if args.command == "describe":
+        return cmd_describe(settings, args)
     accounts, errors = load_accounts(settings)
     if args.command == "serve":
         return cmd_serve(settings, accounts, errors)

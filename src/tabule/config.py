@@ -68,6 +68,7 @@ class Settings:
     openai_api_key: str | None = None
     public_base_url: str | None = None
     openai_model: str = DEFAULT_MODEL
+    openai_describe_model: str = DEFAULT_MODEL
     accounts_dir: Path = DEFAULT_ACCOUNTS_DIR
     db_path: Path = DEFAULT_DB_PATH
     timezone: str = DEFAULT_TIMEZONE
@@ -96,6 +97,9 @@ class Settings:
             openai_api_key=openai_key,
             public_base_url=public,
             openai_model=_optional(env, "TABULE_OPENAI_MODEL", DEFAULT_MODEL),
+            openai_describe_model=_optional(
+                env, "TABULE_OPENAI_DESCRIBE_MODEL", _optional(env, "TABULE_OPENAI_MODEL", DEFAULT_MODEL)
+            ),
             accounts_dir=Path(_optional(env, "TABULE_ACCOUNTS_DIR", str(DEFAULT_ACCOUNTS_DIR))),
             db_path=Path(_optional(env, "TABULE_DB_PATH", str(DEFAULT_DB_PATH))),
             timezone=_optional(env, "TABULE_TIMEZONE", DEFAULT_TIMEZONE),

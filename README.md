@@ -48,6 +48,7 @@ Modelo em `deploy/tabule.env.example`.
 | `TABULE_ACCOUNT_<id>_API_TOKEN` | sim, por conta | Token do usuário técnico na conta |
 | `TABULE_ACCOUNT_<id>_WEBHOOK_SECRET` | sim, por conta | Campo `secret` do webhook da conta |
 | `TABULE_OPENAI_MODEL` | não | Padrão `gpt-6-luna` |
+| `TABULE_OPENAI_DESCRIBE_MODEL` | não | Modelo de texto (Chat Completions) usado por `tabule describe`. Padrão: o mesmo de `TABULE_OPENAI_MODEL` |
 | `TABULE_ACCOUNTS_DIR` | não | Padrão `/etc/tabule/accounts` |
 | `TABULE_DB_PATH` | não | Padrão `/var/lib/tabule/tabule.db` |
 | `TABULE_TIMEZONE` | não | Fuso usado nas datas da transcrição. Padrão `America/Sao_Paulo` |
@@ -76,7 +77,7 @@ options:
 ```
 
 - Os nomes das opções devem ser **exatamente** os valores do atributo no Chatwoot. Ponha entre aspas (no YAML, `SIM`, `NÃO`, `ON` e `OFF` sem aspas viram booleanos).
-- Toda opção do Chatwoot precisa de descrição. Descrição vazia impede a classificação daquela conta até ser preenchida. O `tabule check` aponta quais faltam.
+- Toda opção do Chatwoot precisa de descrição (o `tabule describe` gera um rascunho). Descrição vazia impede a classificação daquela conta até ser preenchida. O `tabule check` aponta quais faltam.
 - Opções com descrição mas inexistentes no Chatwoot geram aviso no `check`.
 
 ## Comandos
@@ -86,6 +87,7 @@ options:
 | `tabule check` | Valida token, papel do usuário, atributo e opções, label de revisão e webhook (URL, assinatura e secret). Sai com código 1 se houver erro. |
 | `tabule serve` | Sobe o serviço (webhook, fila e reconciliação). É o que o systemd executa. |
 | `tabule status` | Mostra a fila e as decisões das últimas 24 h. |
+| `tabule describe --account 9 --about "..."` | Gera, com a OpenAI, o `context` e as descrições das opções do YAML da conta, a partir dos nomes das opções (lidos do Chatwoot) e do texto livre de `--about`. **Não sobrescreve** o que já está preenchido (`--force` regenera tudo; `--dry-run` só mostra). Se o YAML não existe, cria um em `shadow` (exige `--inbox-ids`, aceita `--name`). Faz backup em `<id>.yaml.bak`. O texto é um rascunho: revise. |
 | `tabule backfill --account 9 --days 30` | Enfileira conversas resolvidas sem tabulação. Reprocessa as que já estavam na fila como concluídas, então pode ser rodado de novo ao passar de `shadow` para `live`. |
 | `tabule evaluate --account 9 --sample 40` | Compara a IA com tabulações **feitas por pessoas** (ignora o que a IA gravou), sem gravar nada. Mostra cobertura e concordância por limiar, para escolher `confidence_threshold`. |
 | `tabule revert --account 9 --since 2026-10-17` | Mostra o que seria desfeito. Com `--execute`, limpa `tabulacao` nas conversas que a IA gravou, só se o valor atual ainda for o da IA. |
@@ -123,7 +125,7 @@ Assumindo Ubuntu, Chatwoot instalado a partir do script oficial (nginx na frente
    sudo chown root:tabule /etc/tabule/tabule.env && sudo chmod 640 /etc/tabule/tabule.env
    ```
 
-   Preencha o `.env` (tokens e chave da OpenAI), o YAML da conta (opções e descrições) e deixe `mode: shadow`. O campo `TABULE_ACCOUNT_<id>_WEBHOOK_SECRET` só existe depois de criar o webhook (passo 7). Até lá, use um valor provisório, como `temporario`. Sem um valor, a conta fica desabilitada.
+   Preencha o `.env` (tokens e chave da OpenAI) e o YAML da conta (`tabule describe --account <id> --about "..."` gera um rascunho do `context` e das descrições; revise o texto) e deixe `mode: shadow`. O campo `TABULE_ACCOUNT_<id>_WEBHOOK_SECRET` só existe depois de criar o webhook (passo 7). Até lá, use um valor provisório, como `temporario`. Sem um valor, a conta fica desabilitada.
 
    Os comandos manuais precisam do mesmo ambiente do serviço:
 
