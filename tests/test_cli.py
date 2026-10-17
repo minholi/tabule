@@ -108,3 +108,32 @@ def test_describe_dry_run_does_not_write(tmp_path, monkeypatch):
     assert cli.cmd_describe(settings, _describe_args(cli, "--inbox-ids", "16", "--dry-run")) == 0
     assert len(calls) == 1
     assert not (tmp_path / "9.yaml").exists()
+
+
+def test_check_webhook_tolerates_trailing_slash_and_lists_found_urls():
+    from tabule import cli
+    from tabule.config import Settings
+
+    settings = Settings.from_env(
+        {
+            "TABULE_ALLOWED_ACCOUNT_IDS": "9",
+            "TABULE_CHATWOOT_BASE_URL": "https://omni.example",
+            "TABULE_PUBLIC_BASE_URL": "https://omni.example",
+        },
+        require_openai=False,
+    )
+    account = AccountConfig(
+        id=9, name="FDC", mode="shadow", inbox_ids=frozenset({16}), attribute_key="tabulacao",
+        review_label="r", confidence_threshold=0.8, context="", options={}, api_token="t", webhook_secret="sec",
+    )
+
+    def client_with(hooks):
+        handler = lambda request: httpx.Response(200, json={"payload": {"webhooks": hooks}})
+        return ChatwootClient("https://omni.example", "t", 9, transport=httpx.MockTransport(handler))
+
+    ok = {"url": "https://omni.example/tabule/webhook/9/ ", "subscriptions": ["conversation_status_changed"], "secret": "sec"}
+    assert [level for level, _ in cli._check_webhook(client_with([ok]), settings, account)] == ["OK", "OK"]
+
+    other = {"url": "http://omni.example/tabule/webhook/9", "subscriptions": [], "secret": ""}
+    (level, message), = cli._check_webhook(client_with([other]), settings, account)
+    assert level == "ERRO" and "http://omni.example/tabule/webhook/9" in message

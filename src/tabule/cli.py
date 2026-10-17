@@ -49,9 +49,11 @@ def _client(settings: Settings, account: AccountConfig) -> ChatwootClient:
 
 def _check_webhook(client: ChatwootClient, settings: Settings, account: AccountConfig) -> list[tuple[str, str]]:
     expected = f"{settings.public_base_url}/tabule/webhook/{account.id}"
-    hooks = [hook for hook in client.webhooks() if hook.get("url") == expected]
+    found = client.webhooks()
+    hooks = [hook for hook in found if str(hook.get("url") or "").strip().rstrip("/") == expected]
     if not hooks:
-        return [("ERRO", f"nenhum webhook aponta para {expected}")]
+        urls = ", ".join(str(hook.get("url")) for hook in found) or "nenhum"
+        return [("ERRO", f"nenhum webhook aponta para {expected} (webhooks da conta: {urls})")]
     hook = hooks[0]
     results: list[tuple[str, str]] = []
     if set(hook.get("subscriptions") or []) == {WEBHOOK_EVENT}:

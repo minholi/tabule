@@ -61,3 +61,15 @@ def test_list_resolved_conversations_reads_data_payload():
         return httpx.Response(200, json={"data": {"meta": {}, "payload": [{"id": 7}]}})
 
     assert make_client(handler).list_resolved_conversations(1) == [{"id": 7}]
+
+
+def test_parse_webhooks_accepts_known_response_shapes():
+    from tabule.chatwoot import parse_webhooks
+
+    hook = {"id": 1, "url": "https://omni.example/tabule/webhook/9"}
+    assert parse_webhooks([hook]) == [hook]
+    assert parse_webhooks({"payload": [hook]}) == [hook]
+    assert parse_webhooks({"payload": {"webhooks": [hook]}}) == [hook]
+    assert parse_webhooks({"webhooks": [hook]}) == [hook]
+    assert parse_webhooks({"payload": {}}) == []
+    assert parse_webhooks(None) == []

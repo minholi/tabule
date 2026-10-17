@@ -49,6 +49,17 @@ def attribute_options(definitions: list[dict[str, Any]], key: str) -> list[str]:
     raise RemoteConfigError(f"o atributo '{key}' não existe nesta conta")
 
 
+def parse_webhooks(data: Any) -> list[dict[str, Any]]:
+    """Aceita lista pura, {"payload": [...]}, {"payload": {"webhooks": [...]}} e {"webhooks": [...]}."""
+    for _ in range(3):
+        if isinstance(data, list):
+            return [item for item in data if isinstance(item, dict)]
+        if not isinstance(data, dict):
+            return []
+        data = data.get("payload", data.get("webhooks"))
+    return []
+
+
 class ChatwootClient:
     def __init__(
         self,
@@ -140,5 +151,4 @@ class ChatwootClient:
         return data.get("payload", []) if isinstance(data, dict) else []
 
     def webhooks(self) -> list[dict[str, Any]]:
-        data = self._send("GET", self._path("/webhooks"))
-        return data if isinstance(data, list) else []
+        return parse_webhooks(self._send("GET", self._path("/webhooks")))
